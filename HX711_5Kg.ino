@@ -1,7 +1,10 @@
 #include "HX711.h"
 #include "U8glib.h"
 #include <string.h>
-// #include <ESP8266WiFi.h>
+#include <SoftwareSerial.h>
+
+#define ESP8266_TX 4
+#define ESP8266_RX 5
 
 //接线
 /**
@@ -58,6 +61,7 @@ static unsigned char lv[] U8G_PROGMEM =
 
 
 U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE);  // I2C / TWI 
+SoftwareSerial mySerial(ESP8266_TX,ESP8266_RX);//RX TX
 
 void drawWeightAndBPM(char *weight,char *bpm){
   uint8_t h;
@@ -94,29 +98,22 @@ void setup()
 	delay(3000);
 	Get_Maopi();		//获取毛皮
   weight_update = 1;//force to init
-  //WiFi connecting
-//  Serial.print("Connecting to ");
-//  Serial.println(ssid);
-//  WiFi.begin(ssid, password);
-//  int wifi_ctr = 0;
-//  while(WiFi.status() != WL_CONNECTED){// wait wifi model connecting
-//    delay(500);
-//    Serial.print(".");
-//  }
-//  Serial.println("WiFi connected");
-//  Serial.println("IP address: " + WiFi.localIP());
+  // set the data rate for the SoftwareSerial port wifi 串口通信
+  mySerial.begin(115200);
+  mySerial.println("AT");
+  delay(2000);
+  while (mySerial.available() > 0) {
+    Serial.write(mySerial.read());
+  }
+  mySerial.println("AT+CIPMUX=0"); // 单连接模式
+  delay(2000);
+  mySerial.println("AT+CIPMODE=1"); // 透传模式
+  delay(2000);
+  while(mySerial.read()>= 0){}//clear myserial buffer
 }
 
 void loop()
 {
-//  Serial.print("connecting to ");
-//  Serial.println(host);
-//  WiFiClient client;
-//  const int httpPort = 8080;
-//  if (!client.connect(host, httpPort)) {
-//     Serial.println("connection failed");
-//     return;
-//    }
 	Weight = Get_Weight();	//计算放在传感器上的重物重量
 	Serial.print(float(Weight/1000),3);	//串口显示重量
 	Serial.print(" kg\n");	//显示单位
@@ -124,6 +121,7 @@ void loop()
   Serial.println(BPM);
   itoa(Weight, weight_str, 10);//int to string 10进制
   itoa(BPM,BPM_str,10);
+  connectAliyun("303NO.7",456,Weight,300,BPM);
   if (  weight_update != 0 ) {
     u8g.firstPage();
     do  {
@@ -131,29 +129,26 @@ void loop()
     } while( u8g.nextPage() );
     weight_update = 1;
   }
-  //String postData = (String) "weight=" + weight_str + "&BPM=" + BPM_str;
-//  char postcharData[80];
-//  sprintf(postcharData, "%d%d%d%d","weight=", weight_str, "&BPM=", BPM_str); 
-//  String postData = (String) postcharData;
-//  int length = postData.length();
-//  String postRequest =(String)("POST ") + postPath + " HTTP/1.1\r\n" +
-//      "Content-Type: application/x-www-form-urlencoded;charset=utf-8\r\n" +
-//      "Host: " + host + ":" + httpPort + "\r\n" +          
-//      "Content-Length: " + length + "\r\n" +
-//      "Connection: Keep Alive\r\n\r\n" +
-//      postData+"\r\n";
-//    client.print(postRequest); 
-   //ledFadeToBeat();                      // 心跳灯
+  // ledFadeToBeat();                      // 心跳灯
 	delay(1000);				//延时1s
-  // read response  
-//  String section="header";
-//  while(client.available()){
-//    String line = client.readStringUntil('\r');
-//    Serial.print(line);    // we'll parse the HTML body here
-//  }
-//    Serial.print("closing connection. ");
-
 }
+
+void connectAliyun(String bedId,int initWeight,int currentWeight,int dWeight,int BPM){
+  mySerial.println("AT+CIPSTART=\"TCP\",\"39.106.190.41\",8888"); // 建立TCP连接
+  delay(2000);
+  while(mySerial.read()>= 0){}//clear myserial buffer
+  mySerial.println("AT+CIPSEND"); //开始发送数据
+  delay(2000);
+  while(mySerial.read()>= 0){}//clear myserial buffer
+  String url = "GET http://39.106.190.41:8888/postData?bedId="+bedId+"&initWeight="+initWeight+"&currentWeight="+currentWeight+"&dWeight="+dWeight+"&BPM="+BPM;
+  Serial.println(url);
+  mySerial.println(url); //发送get请求
+  delay(2000);
+  while(mySerial.available() > 0){
+    Serial.write(mySerial.read());
+  }
+}
+
 
 
 
